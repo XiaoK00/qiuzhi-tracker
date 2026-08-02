@@ -1,0 +1,4 @@
+interface:
+  display_name: "求职投递追踪器"
+  short_description: "建立真实企业池，核验岗位，并生成少列、可行动的求职追踪表"
+  default_prompt: "使用 $qiuzhi-tracker 根据我的简历建立100至150家真实企业池，深度核验30至50家重点企业，并生成只含求职总览、企业池、岗位清单和投递进度的精简Excel。"
