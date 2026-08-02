@@ -3,7 +3,7 @@
 
 > Maintainer: [XiaoK00](https://github.com/XiaoK00)
 <p align="center">
-  <img src="assets/social-preview.png" alt="Qiuzhi Tracker" width="100%">
+  
 </p>
 
 一个面向 **Codex Agent Skills** 的求职信息整理工具。它会根据简历与求职限制，建立真实候选企业池，深度核验具体招聘岗位，计算岗位契合指数，并生成少列、可行动、便于持续更新的 Excel 求职追踪表。
