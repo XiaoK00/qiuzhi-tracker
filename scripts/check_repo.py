@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Check repository structure, Skill metadata, archive resources and sample data."""
+"""Check repository structure, version consistency, samples and Skill resources."""
 
 from __future__ import annotations
 
 import compileall
 import json
+import re
 import subprocess
 import sys
 import zipfile
@@ -12,20 +13,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "qiuzhi-tracker"
+VERSION = "1.1.0"
 
 REQUIRED = [
-    ROOT / "README.md",
-    ROOT / "LICENSE",
-    ROOT / "VERSION",
-    SKILL / "SKILL.md",
-    SKILL / "LICENSE.txt",
-    SKILL / "agents" / "openai.yaml",
-    SKILL / "references" / "matching-rubric.md",
-    SKILL / "references" / "research-rules.md",
-    SKILL / "references" / "workbook-schema.md",
-    SKILL / "scripts" / "validate_tracker_data.py",
+    ROOT / "README.md", ROOT / "CHANGELOG.md", ROOT / "LICENSE", ROOT / "VERSION",
+    SKILL / "SKILL.md", SKILL / "LICENSE.txt", SKILL / "agents" / "openai.yaml",
+    SKILL / "references" / "matching-rubric.md", SKILL / "references" / "research-rules.md",
+    SKILL / "references" / "workbook-schema.md", SKILL / "scripts" / "validate_tracker_data.py",
     SKILL / "assets" / "qiuzhi-tracker-template.xlsx",
     ROOT / "examples" / "example-tracker-data.json",
+    ROOT / "examples" / "example-output-redacted.xlsx",
+]
+
+PROHIBITED_EXAMPLE_TERMS = ("资产评估", "估值咨询", "会计师事务所", "审计实习", "财务分析")
+SCAN_FILES = [
+    ROOT / "README.md", SKILL / "SKILL.md", SKILL / "references" / "matching-rubric.md",
+    SKILL / "references" / "research-rules.md", SKILL / "references" / "workbook-schema.md",
+    ROOT / "examples" / "example-prompts.md", ROOT / "examples" / "example-tracker-data.json",
+    ROOT / "examples" / "sample-resume.md",
 ]
 
 
@@ -49,21 +54,33 @@ def main() -> int:
     if missing:
         raise SystemExit("Missing required files:\n- " + "\n- ".join(missing))
 
-    metadata = read_frontmatter(SKILL / "SKILL.md")
-    if metadata.get("name") != SKILL.name:
-        raise SystemExit(
-            f"Skill folder/name mismatch: folder={SKILL.name!r}, name={metadata.get('name')!r}"
-        )
-    if not metadata.get("description"):
-        raise SystemExit("SKILL.md description is missing")
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    if version != VERSION or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise SystemExit(f"Unexpected VERSION: {version}")
+    if f"[{VERSION}]" not in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"):
+        raise SystemExit("CHANGELOG does not contain the current version")
+    if f"v{VERSION}" not in (ROOT / "README.md").read_text(encoding="utf-8"):
+        raise SystemExit("README does not contain the current version")
 
-    template = SKILL / "assets" / "qiuzhi-tracker-template.xlsx"
-    if not zipfile.is_zipfile(template):
-        raise SystemExit("Excel template is not a valid XLSX/ZIP file")
-    with zipfile.ZipFile(template) as zf:
-        bad = zf.testzip()
-        if bad:
-            raise SystemExit(f"Corrupted XLSX member: {bad}")
+    metadata = read_frontmatter(SKILL / "SKILL.md")
+    if metadata.get("name") != SKILL.name or not metadata.get("description"):
+        raise SystemExit("Invalid Skill frontmatter")
+
+    for path in SCAN_FILES:
+        text = path.read_text(encoding="utf-8")
+        for term in PROHIBITED_EXAMPLE_TERMS:
+            if term in text:
+                raise SystemExit(f"Professional-specific example remains in {path.relative_to(ROOT)}: {term}")
+
+    for workbook in [
+        SKILL / "assets" / "qiuzhi-tracker-template.xlsx",
+        ROOT / "examples" / "example-output-redacted.xlsx",
+    ]:
+        if not zipfile.is_zipfile(workbook):
+            raise SystemExit(f"Invalid XLSX: {workbook.relative_to(ROOT)}")
+        with zipfile.ZipFile(workbook) as zf:
+            if zf.testzip():
+                raise SystemExit(f"Corrupted XLSX: {workbook.relative_to(ROOT)}")
 
     if not compileall.compile_dir(str(SKILL / "scripts"), quiet=1):
         raise SystemExit("Skill Python scripts failed to compile")
@@ -71,18 +88,13 @@ def main() -> int:
         raise SystemExit("Repository Python scripts failed to compile")
 
     command = [
-        sys.executable,
-        str(SKILL / "scripts" / "validate_tracker_data.py"),
+        sys.executable, str(SKILL / "scripts" / "validate_tracker_data.py"),
         str(ROOT / "examples" / "example-tracker-data.json"),
-        "--min-companies",
-        "6",
-        "--min-jobs",
-        "4",
+        "--min-companies", "6", "--min-jobs", "5", "--as-of", "2026-08-02",
     ]
     result = subprocess.run(command, text=True, capture_output=True, check=False)
     if result.returncode != 0:
         raise SystemExit(result.stdout + result.stderr)
-
     json.loads((ROOT / "examples" / "example-tracker-data.json").read_text(encoding="utf-8"))
     print("Repository check passed.")
     print(result.stdout.strip())
