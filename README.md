@@ -1,1 +1,1 @@
-# 8Niki0-qiuzhi-tracker
+qiuzhi-tracker
